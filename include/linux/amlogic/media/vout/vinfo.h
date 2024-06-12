@@ -311,7 +311,7 @@ struct dv_info {
 };
 
 struct vout_device_s {
-	struct dv_info *dv_info;
+	const struct dv_info *dv_info;
 	void (*fresh_tx_hdr_pkt)(struct master_display_info_s *data);
 	void (*fresh_tx_vsif_pkt)(enum eotf_type type,
 		enum mode_type tunnel_mode, struct dv_vsif_para *data,
