@@ -6970,7 +6970,7 @@ void prepare_hdr10_param(struct vframe_master_display_colour_s *p_mdc,
 		}
 	}
 
-	if (flag && (debug_dolby & 1)) {
+	if (debug_dolby & 1) {
 		pr_dolby_dbg
 			("HDR10: present %d, %d, %d, %d\n",
 			 p_mdc->present_flag, p_cll->max_content,
@@ -7114,14 +7114,21 @@ static int notify_vd_signal_to_amvideo(struct vd_signal_info_s *vd_signal)
 
 static u32 get_next(char* input)
 {
-	char[5] output;
-	strncpy(output, input, 4);
-	output[4] = '\0';
-	return (u32) strtol(output, NULL, 16);
+	char output[5];
+	strlcpy(output, input, sizeof(output));
+	long result;
+	int ret = kstrtol(output, 16, &result);
+
+
+	if (ret == 0)
+		return (u32)result;
+	return 0;
 }
 
-static void set_hdr10_data_for_lldv()
+static void set_hdr10_data_for_lldv(void)
 {
+	int i = 0;
+
 	hdr10_data.features =
 			  (1 << 29)		/* 1 video available / present */
 			| (5 << 26)		/* 5 unspecified */
@@ -7132,10 +7139,8 @@ static void set_hdr10_data_for_lldv()
 			| (10 << 0);	/* 10 matrix co. bt2020c / 9  bt2020nc */
 
 	char payload[] = "000000000000000000000000000000000000000000000000";
-	pr_info("check length %d %d\n", sizeof(dolby_vision_hdr_payload), sizeof(payload));
-	if (dolby_vision_hdr_inject && (sizeof(dolby_vision_hdr_payload) = sizeof(payload))) {
-		payload = dolby_vision_hdr_hdr_payload
-	}
+	if (dolby_vision_hdr_inject && (strlen(dolby_vision_hdr_payload) == 48))
+		strscpy(payload, dolby_vision_hdr_payload, 49);
 
 	for (i = 0; i < 3; i++) {
 		hdr10_data.primaries[i][0] = get_next(payload+(i*8));
