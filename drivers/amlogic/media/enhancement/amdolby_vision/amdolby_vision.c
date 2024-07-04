@@ -321,6 +321,14 @@ static bool dolby_vision_hdr_for_lldv = false;
 module_param(dolby_vision_hdr_for_lldv, bool, 0664);
 MODULE_PARM_DESC(dolby_vision_hdr_for_lldv, "\n dolby_vision_hdr_for_lldv\n");
 
+static unsigned int dolby_vision_hdr_inject = 0;
+module_param(dolby_vision_hdr_inject, uint, 0664);
+MODULE_PARM_DESC(dolby_vision_hdr_inject, "\n dolby_vision_hdr_inject\n");
+
+static char *dolby_vision_hdr_payload = "";
+module_param(dolby_vision_hdr_payload, charp, 0664);
+MODULE_PARM_DESC(dolby_vision_hdr_payload, "\n dolby_vision_hdr_payload\n");
+
 /*bit0:reset core1 reg; bit1:reset core2 reg;bit2:reset core3 reg*/
 /*bit3: reset core1 lut; bit4: reset core2 lut*/
 static unsigned int force_update_reg;
@@ -7104,6 +7112,43 @@ static int notify_vd_signal_to_amvideo(struct vd_signal_info_s *vd_signal)
 	return 0;
 }
 
+static u32 get_next(char* input)
+{
+	char[5] output;
+	strncpy(output, input, 4);
+	output[4] = '\0';
+	return (u32) strtol(output, NULL, 16);
+}
+
+static void set_hdr10_data_for_lldv()
+{
+	hdr10_data.features =
+			  (1 << 29)		/* 1 video available / present */
+			| (5 << 26)		/* 5 unspecified */
+			| (0 << 25)		/* 0 limited range */
+			| (1 << 24)		/* 1 color available / present */
+			| (9 << 16)		/* 9 primaries bt2020 */
+			| (0x10 << 8)	/* 16 transfer char. smpte-st-2084 */
+			| (10 << 0);	/* 10 matrix co. bt2020c / 9  bt2020nc */
+
+	char payload[] = "000000000000000000000000000000000000000000000000";
+	pr_info("check length %d %d\n", sizeof(dolby_vision_hdr_payload), sizeof(payload));
+	if (dolby_vision_hdr_inject && (sizeof(dolby_vision_hdr_payload) = sizeof(payload))) {
+		payload = dolby_vision_hdr_hdr_payload
+	}
+
+	for (i = 0; i < 3; i++) {
+		hdr10_data.primaries[i][0] = get_next(payload+(i*8));
+		hdr10_data.primaries[i][1] = get_next(payload+(i*8)+4);
+	}
+	hdr10_data.white_point[0] = get_next(payload+24);
+	hdr10_data.white_point[1] = get_next(payload+28);
+	hdr10_data.luminance[0] = get_next(payload+32);
+	hdr10_data.luminance[1] = get_next(payload+36);
+	hdr10_data.max_content = get_next(payload+40);
+	hdr10_data.max_frame_average = get_next(payload+44);
+}
+
 /* #define HDMI_SEND_ALL_PKT */
 static u32 last_dst_format = FORMAT_SDR;
 static bool send_hdmi_pkt
@@ -7326,25 +7371,8 @@ static bool send_hdmi_pkt
 	} else if (dst_format == FORMAT_DOVI && dovi_setting.dovi_ll_enable && dolby_vision_hdr_for_lldv) {
 
 		sdr_transition_delay = 0;
-		hdr10_data.features =
-			  (1 << 29)		/* 1 video available / present */
-			| (5 << 26)		/* 5 unspecified */
-			| (0 << 25)		/* 0 limited range */
-			| (1 << 24)		/* 1 color available / present */
-			| (9 << 16)		/* 9 primaries bt2020 */
-			| (0x10 << 8)	/* 16 transfer char. smpte-st-2084 */
-			| (10 << 0);	/* 10 matrix co. bt2020c / 9  bt2020nc */
 
-		for (i = 0; i < 3; i++) {
-			hdr10_data.primaries[i][0] = 0;
-			hdr10_data.primaries[i][1] = 0;
-		}
-		hdr10_data.white_point[0] = 0;
-		hdr10_data.white_point[1] = 0;
-		hdr10_data.luminance[0] = 0;
-		hdr10_data.luminance[1] = 0;
-		hdr10_data.max_content = 0;
-		hdr10_data.max_frame_average = 0;
+		set_hdr10_data_for_lldv();
 
 		if (vinfo && vinfo->vout_device &&
 		    vinfo->vout_device->fresh_tx_hdr_pkt)
