@@ -7112,23 +7112,24 @@ static int notify_vd_signal_to_amvideo(struct vd_signal_info_s *vd_signal)
 	return 0;
 }
 
-static u32 get_next(char* input)
+static u32 get_swap_endian_u32(char* input)
 {
-	char output[5];
-	strlcpy(output, input, sizeof(output));
 	long result;
-	int ret = kstrtol(output, 16, &result);
+	int ret;
 
+	char data[5];
+	data[0] = input[2];
+	data[1] = input[3];
+	data[2] = input[0];
+	data[3] = input[1];
+	data[4] = '\0';
 
-	if (ret == 0)
-		return (u32)result;
-	return 0;
+	ret = kstrtol(data, 16, &result);
+	return (ret == 0) ? (u32)result : 0;
 }
 
 static void set_hdr10_data_for_lldv(void)
 {
-	int i = 0;
-
 	hdr10_data.features =
 			  (1 << 29)		/* 1 video available / present */
 			| (5 << 26)		/* 5 unspecified */
@@ -7138,20 +7139,42 @@ static void set_hdr10_data_for_lldv(void)
 			| (0x10 << 8)	/* 16 transfer char. smpte-st-2084 */
 			| (10 << 0);	/* 10 matrix co. bt2020c / 9  bt2020nc */
 
-	char payload[] = "000000000000000000000000000000000000000000000000";
-	if (dolby_vision_hdr_inject && (strlen(dolby_vision_hdr_payload) == 48))
-		strscpy(payload, dolby_vision_hdr_payload, 49);
+	// Not injecting or attempting to inject but payload is not 48 byte long - then set all 0.
+	if ((dolby_vision_hdr_inject == 0) || ((dolby_vision_hdr_inject == 1) && (strlen(dolby_vision_hdr_payload) != 48))) {
 
-	for (i = 0; i < 3; i++) {
-		hdr10_data.primaries[i][0] = get_next(payload+(i*8));
-		hdr10_data.primaries[i][1] = get_next(payload+(i*8)+4);
+		int i = 0;
+
+		for (i = 0; i < 3; i++) {
+			hdr10_data.primaries[i][0] = 0;
+			hdr10_data.primaries[i][1] = 0;
+		}
+		hdr10_data.white_point[0] = 0;
+		hdr10_data.white_point[1] = 0;
+		hdr10_data.luminance[0] = 0;
+		hdr10_data.luminance[1] = 0;
+		hdr10_data.max_content = 0;
+		hdr10_data.max_frame_average = 0;
+
+		dolby_vision_hdr_inject = 2; // Do not set again until inject reset to 0;
+
+	// Injecting and payload is 48 byte long - then parse payload and inject (if parsing fails then will be 0 for that element).
+	} else if ((dolby_vision_hdr_inject == 1) && (strlen(dolby_vision_hdr_payload) == 48)) {
+
+		int i = 0;
+
+		for (i = 0; i < 3; i++) {
+			hdr10_data.primaries[i][0] = get_swap_endian_u32(dolby_vision_hdr_payload+(i*8));
+			hdr10_data.primaries[i][1] = get_swap_endian_u32(dolby_vision_hdr_payload+(i*8)+4);
+		}
+		hdr10_data.white_point[0] = get_swap_endian_u32(dolby_vision_hdr_payload+24);
+		hdr10_data.white_point[1] = get_swap_endian_u32(dolby_vision_hdr_payload+28);
+		hdr10_data.luminance[0] = get_swap_endian_u32(dolby_vision_hdr_payload+32);
+		hdr10_data.luminance[1] = get_swap_endian_u32(dolby_vision_hdr_payload+36);
+		hdr10_data.max_content = get_swap_endian_u32(dolby_vision_hdr_payload+40);
+		hdr10_data.max_frame_average = get_swap_endian_u32(dolby_vision_hdr_payload+44);
+
+		dolby_vision_hdr_inject = 3; // Do not set again until inject reset to 1;
 	}
-	hdr10_data.white_point[0] = get_next(payload+24);
-	hdr10_data.white_point[1] = get_next(payload+28);
-	hdr10_data.luminance[0] = get_next(payload+32);
-	hdr10_data.luminance[1] = get_next(payload+36);
-	hdr10_data.max_content = get_next(payload+40);
-	hdr10_data.max_frame_average = get_next(payload+44);
 }
 
 /* #define HDMI_SEND_ALL_PKT */
